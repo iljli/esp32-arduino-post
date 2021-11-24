@@ -184,7 +184,7 @@ void postDataToServer()
 
     // http.begin("http://192.168.0.4:3000/sensor");
     // http.begin("http://192.168.188.205:3000/sensor");
-    http.begin("http://2901-84-184-237-124.ngrok.io/sensor");
+    http.begin("http://1368-87-139-68-34.ngrok.io/sensor");
     // http.begin("https://moisturizeme.herokuapp.com/sensor"); // deployed master on heroku
     // http.begin("http://" + String(IPAddress(WiFi.localIP())) + ":3000/sensor");
     // IPAddress(WiFi.localIP())

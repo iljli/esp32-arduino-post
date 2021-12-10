@@ -15,6 +15,7 @@
 // Other
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <time.h>
 
 //*************************************************************************
 
@@ -24,10 +25,13 @@
 // const char *AP_PWD = "?";
 
 // ---- Sensor ----
-#define CCS811_ADDR 0x5A //Alternate I2C Address
+#define CCS811_ADDR 0x5A // Alternate I2C Address
 #define PRESSURE_ARRAY_SIZE 40
 
 //*************************************************************************
+
+struct tm t;
+time_t t_of_day;
 
 //*************************************************************************
 
@@ -69,7 +73,7 @@ Adafruit_BMP280 bmp; // use I2C interface
 Adafruit_Sensor *bmp_temp = bmp.getTemperatureSensor();
 Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
 
-//Create Instance of SI7021 temp and humidity sensor
+// Create Instance of SI7021 temp and humidity sensor
 Weather Si7021;
 
 // ---- NTP ----
@@ -79,6 +83,8 @@ unsigned long lastNTPResponse = millis();
 uint32_t timeUNIX = 0;
 
 unsigned long prevActualTime = 0;
+
+unsigned long epochTime;
 
 // ---- general ----
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -135,7 +141,7 @@ void setup()
 
   Si7021.begin(); // Initialize the I2C humiditysensors and ping them
 
-  //This begins the CCS811 sensor and prints error status of .beginWithStatus()
+  // This begins the CCS811 sensor and prints error status of .beginWithStatus()
   CCS811Core::CCS811_Status_e returnCode = myCCS811.beginWithStatus();
   Serial.print("CCS811 begin exited with: ");
   Serial.println(myCCS811.statusString(returnCode));
@@ -184,8 +190,8 @@ void postDataToServer()
 
     // http.begin("http://192.168.0.4:3000/sensor");
     // http.begin("http://192.168.188.205:3000/sensor");
-    http.begin("http://1368-87-139-68-34.ngrok.io/sensor");
-    // http.begin("https://moisturizeme.herokuapp.com/sensor"); // deployed master on heroku
+    // http.begin("http://1368-87-139-68-34.ngrok.io/sensor");
+    http.begin("https://moisturizemebackend.herokuapp.com/sensor"); // deployed master on heroku
     // http.begin("http://" + String(IPAddress(WiFi.localIP())) + ":3000/sensor");
     // IPAddress(WiFi.localIP())
 
@@ -194,8 +200,8 @@ void postDataToServer()
     StaticJsonDocument<200> doc;
     // Add values in the document
     //
-    doc["sensor_id"] = "1";
-    doc["time"] = 12345678;
+    doc["sensor_id"] = "61a7ddf4bd2a3ef8377b3bb3";
+    doc["time"] = (long)t_of_day;
     doc["pressure"] = pressure;
     doc["temperature"] = temperature;
     doc["humidity"] = humidity;
@@ -281,13 +287,13 @@ void perform_measurements(void)
   {
     myCCS811.setEnvironmentalData((float)humidity, temperature);
 
-    //Calling this function updates the global tVOC and eCO2 variables
+    // Calling this function updates the global tVOC and eCO2 variables
     myCCS811.readAlgorithmResults();
 
     carbondioxide = myCCS811.getCO2();
     organic = myCCS811.getTVOC();
 
-    //printUART();
+    // printUART();
   }
 
   sensors_event_t temp_event, pressure_event;
@@ -299,6 +305,8 @@ void perform_measurements(void)
   pressure_low = ((pressure - pressure_high) * 100); // from a 1234.56 it contains 56
 
   calculatePessureAverage();
+
+  epochTime = getTime();
 }
 
 //*************************************************************************
@@ -319,6 +327,9 @@ void printUART()
   Serial.print(F(" tVOC: "));
   Serial.print(organic);
   Serial.print(F(" ppb"));
+
+  Serial.print(F(" Epoch Time: "));
+  Serial.print(epochTime);
 
   Serial.println();
 }
@@ -345,6 +356,21 @@ void printDisplay(char statusLine1[], String statusLine2, IPAddress statusLine3,
 }
 
 //*************************************************************************
+// Function that gets current epoch time
+unsigned long getTime()
+{
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))
+  {
+    // Serial.println("Failed to obtain time");
+    return (0);
+  }
+  time(&now);
+  return now;
+}
+
+//*************************************************************************
 void printLocalTime()
 {
   struct tm timeinfo;
@@ -353,7 +379,17 @@ void printLocalTime()
     Serial.println("Failed to obtain time");
     return;
   }
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+  Serial.println(&timeinfo, "%B %d %Y %H:%M:%S");
+
+  t.tm_sec = timeinfo.tm_sec;
+  t.tm_min = timeinfo.tm_min;
+  t.tm_hour = timeinfo.tm_hour;
+  t.tm_mday = timeinfo.tm_mday;
+  t.tm_mon = timeinfo.tm_mon;
+  t.tm_year = timeinfo.tm_year;
+  t.tm_isdst = timeinfo.tm_isdst;
+  t_of_day = mktime(&t);
+
   // Serial.print("Day of week: ");
   // Serial.println(&timeinfo, "%A");
   // Serial.print("Month: ");
@@ -383,9 +419,11 @@ void printLocalTime()
 
 void loop()
 {
-  delay(2000);
+  delay(60000);
   ntp_request();
   printLocalTime();
   perform_measurements();
   postDataToServer();
+
+  // Serial.println((long) t_of_day);
 }
